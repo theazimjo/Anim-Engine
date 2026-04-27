@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function SidebarLeft({ activeTool, setActiveTool, layers, setLayers, onAddCharacter }) {
+export default function SidebarLeft({ activeTool, setActiveTool, layers, setLayers, onAddCharacter, onOpenLibrary }) {
   const toggleVisibility = (id) => {
     setLayers(layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l))
   }
@@ -20,6 +20,10 @@ export default function SidebarLeft({ activeTool, setActiveTool, layers, setLaye
         <button className="tool-btn" onClick={onAddCharacter}>
           <span className="tool-icon">人</span>
           <span className="tool-label">Character</span>
+        </button>
+        <button className="tool-btn" onClick={onOpenLibrary}>
+          <span className="tool-icon">👥</span>
+          <span className="tool-label">Library</span>
         </button>
       </div>
 

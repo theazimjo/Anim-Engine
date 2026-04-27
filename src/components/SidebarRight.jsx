@@ -5,7 +5,6 @@ const VFX_LIST = [
   { id: 'aura', icon: '⚡', name: 'Energy Aura', desc: 'Character power aura' },
   { id: 'glow', icon: '✨', name: 'Eye Glow', desc: 'Luminous eye effect' },
   { id: 'impact', icon: '💥', name: 'Impact Frame', desc: 'Flash on action hit' },
-  { id: 'rimlight', icon: '🌟', name: 'Rim Light', desc: 'Back-lit edge glow' },
   { id: 'sakura', icon: '🌸', name: 'Sakura Petals', desc: 'Falling petal particles' }
 ]
 
@@ -16,6 +15,12 @@ export default function SidebarRight({
   vfxParams, setVfxParams,
   selectedCharacter, characters, setCharacters
 }) {
+  const char = characters.find(c => c.id === selectedCharacter);
+
+  const updateChar = (key, value) => {
+    setCharacters(prev => prev.map(c => c.id === selectedCharacter ? { ...c, [key]: value } : c));
+  };
+
   return (
     <aside id="sidebar-right">
       <div className="right-tabs">
@@ -42,15 +47,59 @@ export default function SidebarRight({
           </div>
         </div>
 
-        {selectedCharacter && (
+        {char && (
           <div className="prop-section">
-            <div className="prop-section-title">Character Rig</div>
+            <div className="prop-section-title">Character Transform</div>
+            <div className="prop-row">
+              <label>Pos X</label>
+              <input type="range" min="-640" max="640" value={char.x || 0} onChange={e => updateChar('x', Number(e.target.value))} />
+            </div>
+            <div className="prop-row">
+              <label>Pos Y</label>
+              <input type="range" min="-360" max="360" value={char.y || 0} onChange={e => updateChar('y', Number(e.target.value))} />
+            </div>
+            <div className="prop-row">
+              <label>Scale</label>
+              <input type="range" min="10" max="300" value={char.scale || 100} onChange={e => updateChar('scale', Number(e.target.value))} />
+            </div>
+            <div className="prop-row">
+              <label>Rotation</label>
+              <input type="range" min="-180" max="180" value={char.rotation || 0} onChange={e => updateChar('rotation', Number(e.target.value))} />
+            </div>
+
+            <div className="prop-section-title" style={{marginTop: '16px'}}>Character Colors</div>
+            <div className="prop-row">
+              <label>Skin</label>
+              <input type="color" value={char.skinColor || '#f5ccb0'} onChange={e => updateChar('skinColor', e.target.value)} />
+            </div>
+            <div className="prop-row">
+              <label>Hair</label>
+              <input type="color" value={char.hairColor || '#7c3aed'} onChange={e => updateChar('hairColor', e.target.value)} />
+            </div>
+            <div className="prop-row">
+              <label>Eyes</label>
+              <input type="color" value={char.eyeColor || '#06b6d4'} onChange={e => updateChar('eyeColor', e.target.value)} />
+            </div>
+            <div className="prop-row">
+              <label>Outfit</label>
+              <input type="color" value={char.bodyColor || '#222233'} onChange={e => updateChar('bodyColor', e.target.value)} />
+            </div>
+            <div className="prop-row">
+              <label>Accessory</label>
+              <input type="color" value={char.accColor || '#ffffff'} onChange={e => updateChar('accColor', e.target.value)} />
+            </div>
+
+            <div className="prop-section-title" style={{marginTop: '16px'}}>Character Rig</div>
             <div className="prop-row">
               <label>Expression</label>
             </div>
             <div className="expr-grid">
               {['neutral', 'happy', 'sad', 'angry', 'surprised', 'blush'].map(e => (
-                <button key={e} className={`expr-btn ${e === 'neutral' ? 'active' : ''}`}>
+                <button 
+                  key={e} 
+                  className={`expr-btn ${(char.expression || 'neutral') === e ? 'active' : ''}`}
+                  onClick={() => updateChar('expression', e)}
+                >
                   {e === 'neutral' ? '😐' : e === 'happy' ? '😊' : e === 'sad' ? '😢' : e === 'angry' ? '😠' : e === 'surprised' ? '😲' : '😳'}
                 </button>
               ))}
@@ -59,15 +108,19 @@ export default function SidebarRight({
             <div style={{ marginTop: '16px' }}>
               <div className="prop-row">
                 <label>Head Turn</label>
-                <input type="range" min="-45" max="45" defaultValue="0" />
+                <input type="range" min="-45" max="45" value={char.headTurn || 0} onChange={e => updateChar('headTurn', Number(e.target.value))} />
+              </div>
+              <div className="prop-row">
+                <label>Body Turn</label>
+                <input type="range" min="-45" max="45" value={char.bodyTurn || 0} onChange={e => updateChar('bodyTurn', Number(e.target.value))} />
               </div>
               <div className="prop-row">
                 <label>Eye Open</label>
-                <input type="range" min="0" max="100" defaultValue="100" />
+                <input type="range" min="0" max="100" value={char.eyeOpen !== undefined ? char.eyeOpen : 100} onChange={e => updateChar('eyeOpen', Number(e.target.value))} />
               </div>
               <div className="prop-row">
                 <label>Mouth Open</label>
-                <input type="range" min="0" max="100" defaultValue="0" />
+                <input type="range" min="0" max="100" value={char.mouthOpen || 0} onChange={e => updateChar('mouthOpen', Number(e.target.value))} />
               </div>
             </div>
           </div>

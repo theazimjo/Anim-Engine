@@ -239,7 +239,7 @@ export class Renderer {
     return c;
   }
 
-  drawSprite(textureId, x, y, scaleX = 1, scaleY = 1, tintHex = null) {
+  drawSprite(textureId, x, y, scaleX = 1, scaleY = 1, tintHex = null, rotation = 0) {
     const gl = this.gl;
     const texObj = this.textures.get(textureId);
     if (!texObj) return;
@@ -254,26 +254,47 @@ export class Renderer {
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
 
-    // Compute matrix: Projection * Translation * Scale
+    // Compute matrix: Projection * Translation * [Rotation around center] * Scale
     let matrix = [...this.projectionMatrix];
     
-    // Translation matrix
+    // Translation matrix (to final screen pos)
     let translationMat = [
       1, 0, 0,
       0, 1, 0,
       x, y, 1
     ];
+    matrix = this.multiplyMatrix(matrix, translationMat);
+
+    // Rotation around center
+    if (rotation !== 0) {
+      const w = texObj.width * scaleX;
+      const h = texObj.height * scaleY;
+      const px = w / 2;
+      const py = h / 2;
+      
+      const c = Math.cos(rotation);
+      const s = Math.sin(rotation);
+      let rotMat = [
+        c, s, 0,
+        -s, c, 0,
+        0, 0, 1
+      ];
+      
+      let pMat = [1,0,0, 0,1,0, px,py,1];
+      let pInvMat = [1,0,0, 0,1,0, -px,-py,1];
+      
+      matrix = this.multiplyMatrix(matrix, pMat);
+      matrix = this.multiplyMatrix(matrix, rotMat);
+      matrix = this.multiplyMatrix(matrix, pInvMat);
+    }
     
-    // Scale matrix (width and height of texture * user scale)
-    let width = texObj.width * scaleX;
-    let height = texObj.height * scaleY;
+    // Scale matrix
     let scaleMat = [
-      width, 0, 0,
-      0, height, 0,
+      texObj.width * scaleX, 0, 0,
+      0, texObj.height * scaleY, 0,
       0, 0, 1
     ];
 
-    matrix = this.multiplyMatrix(matrix, translationMat);
     matrix = this.multiplyMatrix(matrix, scaleMat);
 
     gl.uniformMatrix3fv(this.locMatrix, false, matrix);

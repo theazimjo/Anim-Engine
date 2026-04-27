@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Renderer } from '../engine/Renderer'
-import { AssetStore, loadImage } from '../engine/AssetStore'
+import { AssetStore, loadImage, getAssetsToLoad } from '../engine/AssetStore'
 
 export default function Viewport({
   canvasRef, overlayRef, activeTab, setActiveTab,
@@ -15,17 +15,12 @@ export default function Viewport({
     if (!canvasRef.current) return;
     const r = new Renderer(canvasRef.current);
     
-    // Load default assets
-    Promise.all([
-      loadImage(AssetStore.head).then(img => r.createTexture('head', img)),
-      loadImage(AssetStore.eyes1).then(img => r.createTexture('eyes1', img)),
-      loadImage(AssetStore.mouthNeutral).then(img => r.createTexture('mouth1', img)),
-      loadImage(AssetStore.hair1).then(img => r.createTexture('hair1', img)),
-      loadImage(AssetStore.hair2).then(img => r.createTexture('hair2', img)),
-    ]).then(() => {
-      setRenderer(r);
-      setAssetsLoaded(true);
-    });
+    const assets = getAssetsToLoad();
+    Promise.all(assets.map(asset => loadImage(asset.uri).then(img => r.createTexture(asset.id, img))))
+      .then(() => {
+        setRenderer(r);
+        setAssetsLoaded(true);
+      });
   }, [canvasRef]);
 
   // Main Render Loop
@@ -44,22 +39,48 @@ export default function Viewport({
       const charLayer = layers.find(l => l.id === 'char1');
       if (charLayer && charLayer.visible) {
         characters.forEach(char => {
-          // Calculate center of screen
-          const cx = 1280 / 2 - 100; // Face is 200 wide, offset by half
-          const cy = 720 / 2 - 150; // Face is 250 high, offset by ~half
+          // Transform calculation
+          const baseScale = (char.scale || 100) / 100;
+          const baseScaleX = (1 + ((char.width || 0) / 100) * 0.5) * baseScale;
+          const baseScaleY = (1 + ((char.height || 0) / 100) * 0.5) * baseScale;
           
-          // Draw head (base skin color)
-          renderer.drawSprite('head', cx, cy);
+          // Screen coordinates (relative to center)
+          const centerX = 1280 / 2 + (char.x || 0);
+          const centerY = 720 / 2 + (char.y || 0);
           
-          // Draw eyes (tinted)
-          renderer.drawSprite('eyes1', cx, cy, 1, 1, char.eyeColor);
+          // Offset to draw from pivot (center of head/body which is 100,125 in 200x250)
+          const cx = centerX - (100 * baseScaleX);
+          const cy = centerY - (125 * baseScaleY);
           
-          // Draw mouth
-          renderer.drawSprite('mouth1', cx, cy);
+          const rotation = (char.rotation || 0) * (Math.PI / 180);
+
+          // Note: Renderer.drawSprite currently doesn't support rotation. 
+          // For now we apply scale and position. 
+          // TODO: Update drawSprite to support rotation matrix.
           
-          // Draw hair (tinted using Color Masking Shader!)
-          const hairTex = char.hairStyle === 2 ? 'hair2' : 'hair1';
-          renderer.drawSprite(hairTex, cx, cy, 1, 1, char.hairColor);
+          const headTurnOffset = (char.headTurn || 0) * 0.5 * baseScaleX;
+          const eyeTex = `eyes_${char.eyes || 1}`;
+          const noseTex = `nose_${char.nose || 1}`;
+          const mouthTex = `mouth_${char.mouth || 1}`;
+          const accTex = `acc_${char.acc || 1}`;
+          const hairTex = `hair_${char.hairStyle || 1}`;
+
+          renderer.drawSprite(`body_${char.body || 1}`, cx, cy, baseScaleX, baseScaleY, char.bodyColor, rotation);
+          renderer.drawSprite(`head_${char.head || 1}`, cx, cy, baseScaleX, baseScaleY, char.skinColor, rotation);
+          
+          // Manual Vertical Offsets from Character Creator
+          const eyeY = char.eyeY || 0;
+          const noseY = char.noseY || 0;
+          const mouthY = char.mouthY || 0;
+
+          // Eyes, Nose, Mouth, and Accessories move with head turn and manual offsets
+          renderer.drawSprite(eyeTex, cx + headTurnOffset, cy + eyeY, baseScaleX, baseScaleY, char.eyeColor, rotation);
+          renderer.drawSprite(noseTex, cx + headTurnOffset * 0.7, cy + noseY, baseScaleX, baseScaleY, null, rotation);
+          renderer.drawSprite(mouthTex, cx + headTurnOffset * 0.6, cy + mouthY, baseScaleX, baseScaleY, null, rotation);
+          renderer.drawSprite(accTex, cx + headTurnOffset * 0.8, cy, baseScaleX, baseScaleY, char.accColor, rotation);
+          
+          // Hair also moves slightly
+          renderer.drawSprite(hairTex, cx + headTurnOffset * 0.3, cy, baseScaleX, baseScaleY, char.hairColor, rotation);
         });
       }
 
