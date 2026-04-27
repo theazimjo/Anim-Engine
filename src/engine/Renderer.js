@@ -196,8 +196,8 @@ export class Renderer {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     
-    // Flip Y for WebGL
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    // Do not flip Y for our 2D Top-Left projection
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
     
