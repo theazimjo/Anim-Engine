@@ -13,12 +13,17 @@ export default function SidebarRight({
   bgColor, setBgColor,
   vfxEnabled, onVfxToggle,
   vfxParams, setVfxParams,
-  selectedCharacter, characters, setCharacters
+  selectedCharacter, characters, setCharacters,
+  currentFrame, addKeyframe
 }) {
   const char = characters.find(c => c.id === selectedCharacter);
 
   const updateChar = (key, value) => {
     setCharacters(prev => prev.map(c => c.id === selectedCharacter ? { ...c, [key]: value } : c));
+    // Also add a keyframe automatically
+    if (['x', 'y', 'rotation', 'scale', 'headTurn', 'eyeOpen', 'mouthOpen'].includes(key)) {
+      addKeyframe(key, value);
+    }
   };
 
   return (

@@ -15,30 +15,43 @@ export default function App() {
   const [activeTool, setActiveTool] = useState('select')
   const [activeTab, setActiveTab] = useState('scene')
   const [activeRightTab, setActiveRightTab] = useState('properties')
+  
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentFrame, setCurrentFrame] = useState(0)
   const [totalFrames] = useState(240)
-  const [fps, setFps] = useState(12)
+  const [fps, setFps] = useState(24)
   const [zoom, setZoom] = useState(100)
   const [bgColor, setBgColor] = useState('#0d0d1a')
+  const [animeMode, setAnimeMode] = useState(false)
+  
   const [vfxEnabled, setVfxEnabled] = useState({})
   const [vfxParams, setVfxParams] = useState({ intensity: 70, color: '#7c3aed', speed: 50 })
-  const [characters, setCharacters] = useState([])
+  
+  const [characters, setCharacters] = useState([
+    { 
+      id: 'char1', 
+      name: 'Agent Zero', 
+      config: { 
+        head: 1, body: 1, hairStyle: 1, hairColor: '#7c3aed', 
+        eyes: 1, eyeColor: '#06b6d4', mouth: 1, nose: 1, acc: 1,
+        width: 0, height: 0, eyeY: 0, mouthY: 0, noseY: 0, hairY: 0
+      },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0, headTurn: 0 },
+      keyframes: {
+        rotation: [{ frame: 0, value: 0 }, { frame: 120, value: 30 }, { frame: 240, value: 0 }],
+        headTurn: [{ frame: 0, value: 0 }, { frame: 60, value: 25 }, { frame: 180, value: -25 }, { frame: 240, value: 0 }]
+      }
+    }
+  ])
+  
   const [savedCharacters, setSavedCharacters] = useState(() => {
     const saved = localStorage.getItem('animeforge_library');
     return saved ? JSON.parse(saved) : [];
   })
-  const [selectedCharacter, setSelectedCharacter] = useState(null)
+  const [selectedCharacter, setSelectedCharacter] = useState('char1')
   const [layers, setLayers] = useState([
-    { id: 'bg', name: 'Background', visible: true, locked: false },
-    { id: 'char1', name: 'Character', visible: true, locked: false },
-    { id: 'vfx', name: 'VFX', visible: true, locked: false },
+    { id: 'char1', name: 'Agent Zero', visible: true, locked: false }
   ])
-
-  const canvasRef = useRef(null)
-  const overlayRef = useRef(null)
-  const animFrameRef = useRef(null)
-  const frameTimerRef = useRef(null)
 
   // Splash
   useEffect(() => {
@@ -46,28 +59,20 @@ export default function App() {
     return () => clearTimeout(t)
   }, [])
 
-  // Playback
+  // Playback Loop
   useEffect(() => {
+    let interval;
     if (isPlaying) {
-      frameTimerRef.current = setInterval(() => {
+      interval = setInterval(() => {
         setCurrentFrame(f => (f + 1) % totalFrames)
       }, 1000 / fps)
-    } else {
-      clearInterval(frameTimerRef.current)
     }
-    return () => clearInterval(frameTimerRef.current)
+    return () => clearInterval(interval)
   }, [isPlaying, fps, totalFrames])
 
   useEffect(() => {
     localStorage.setItem('animeforge_library', JSON.stringify(savedCharacters));
   }, [savedCharacters]);
-
-  const addCharacterToScene = (config) => {
-    const newChar = { ...config, id: Date.now().toString() }
-    setCharacters([...characters, newChar])
-    setSelectedCharacter(newChar.id)
-    setShowCreator(false)
-  }
 
   const saveCharacterToLibrary = (config, name) => {
     const newChar = { ...config, name, id: Date.now().toString() }
@@ -76,10 +81,37 @@ export default function App() {
   }
 
   const spawnFromLibrary = (char) => {
-    const spawned = { ...char, id: Date.now().toString() }; 
+    const spawned = { 
+      id: Date.now().toString(),
+      name: char.name,
+      config: { ...char },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0, headTurn: 0 },
+      keyframes: {
+        x: [{ frame: 0, value: 0 }],
+        y: [{ frame: 0, value: 0 }],
+        rotation: [{ frame: 0, value: 0 }]
+      }
+    }; 
     setCharacters([...characters, spawned]);
+    setLayers([...layers, { id: spawned.id, name: spawned.name, visible: true, locked: false }]);
     setSelectedCharacter(spawned.id);
     setViewMode('editor');
+  }
+
+  const addKeyframe = (property, value) => {
+    if (!selectedCharacter) return;
+    setCharacters(prev => prev.map(char => {
+      if (char.id === selectedCharacter) {
+        const newKeyframes = { ...char.keyframes };
+        if (!newKeyframes[property]) newKeyframes[property] = [];
+        // Remove existing keyframe at this frame
+        newKeyframes[property] = newKeyframes[property].filter(kf => kf.frame !== currentFrame);
+        // Add new keyframe
+        newKeyframes[property].push({ frame: currentFrame, value });
+        return { ...char, keyframes: newKeyframes };
+      }
+      return char;
+    }));
   }
 
   const handleVfxToggle = useCallback((key, val) => {
@@ -100,6 +132,8 @@ export default function App() {
             totalFrames={totalFrames}
             fps={fps}
             setFps={setFps}
+            animeMode={animeMode}
+            setAnimeMode={setAnimeMode}
           />
           <div id="main-layout">
             <SidebarLeft
@@ -112,21 +146,13 @@ export default function App() {
             />
             <div id="center-col">
               <Viewport
-                canvasRef={canvasRef}
-                overlayRef={overlayRef}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                zoom={zoom}
-                setZoom={setZoom}
                 bgColor={bgColor}
+                zoom={zoom}
                 characters={characters}
                 selectedCharacter={selectedCharacter}
-                setSelectedCharacter={setSelectedCharacter}
-                vfxEnabled={vfxEnabled}
-                vfxParams={vfxParams}
                 currentFrame={currentFrame}
                 isPlaying={isPlaying}
-                layers={layers}
+                animeMode={animeMode}
               />
               <Timeline
                 currentFrame={currentFrame}
@@ -134,7 +160,13 @@ export default function App() {
                 totalFrames={totalFrames}
                 fps={fps}
                 layers={layers}
+                characters={characters}
                 isPlaying={isPlaying}
+                onAddKey={() => {
+                  // For now, let's add a rotation key as a demo
+                  const char = characters.find(c => c.id === selectedCharacter);
+                  if (char) addKeyframe('rotation', char.transform.rotation);
+                }}
               />
             </div>
             <SidebarRight
@@ -149,6 +181,8 @@ export default function App() {
               selectedCharacter={selectedCharacter}
               characters={characters}
               setCharacters={setCharacters}
+              currentFrame={currentFrame}
+              addKeyframe={addKeyframe}
             />
           </div>
         </>

@@ -1,69 +1,95 @@
-import React from 'react'
+import React, { useRef, useEffect } from 'react'
 
-export default function Timeline({ currentFrame, totalFrames, layers }) {
+export default function Timeline({ currentFrame, setCurrentFrame, totalFrames, fps, layers, isPlaying, characters = [], onAddKey }) {
+  const scrollRef = useRef(null)
+  const isDragging = useRef(false)
+
+  const handleMouseDown = (e) => {
+    isDragging.current = true
+    handleScrub(e)
+  }
+
+  const handleMouseMove = (e) => {
+    if (isDragging.current) handleScrub(e)
+  }
+
+  const handleMouseUp = () => {
+    isDragging.current = false
+  }
+
+  const handleScrub = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percent = Math.max(0, Math.min(1, x / rect.width))
+    setCurrentFrame(Math.floor(percent * totalFrames))
+  }
+
+  useEffect(() => {
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => window.removeEventListener('mouseup', handleMouseUp)
+  }, [])
+
   return (
     <div id="timeline-container">
       <div className="tl-header">
-        <span className="tl-title">TIMELINE</span>
-        <div className="tl-spacer"></div>
-        <button className="tl-btn">◆ Add Key</button>
-        <button className="tl-btn">✕ Delete Key</button>
+        <div className="tl-controls">
+          <span className="tl-title">TIMELINE</span>
+          <span className="tl-time-readout">
+            {Math.floor(currentFrame / fps)}:{(currentFrame % fps).toString().padStart(2, '0')} 
+            <span className="tl-total"> / {Math.floor(totalFrames / fps)}:00</span>
+          </span>
+        </div>
+        <div className="tl-actions">
+          <button className="tl-btn secondary" onClick={onAddKey}>◆ Add Key</button>
+          <button className="tl-btn danger">✕ Clear</button>
+        </div>
       </div>
       
       <div className="tl-body">
         <div className="tl-tracks-col">
-          <div className="tl-track-label" style={{ height: '24px' }}>Time</div>
+          <div className="tl-track-label header">TRACKS</div>
           {layers.map(l => (
-            <div key={l.id} className="tl-track-label">{l.name}</div>
+            <div key={l.id} className="tl-track-label">
+              <span className="track-icon">▤</span>
+              <span className="track-name">{l.name}</span>
+            </div>
           ))}
         </div>
         
-        <div className="tl-canvas-col">
-          <div style={{ position: 'relative', width: '2000px', height: '100%' }}>
-            {/* Playhead */}
-            <div style={{ 
-              position: 'absolute', top: 0, bottom: 0, 
-              width: '2px', background: 'var(--accent-pink)',
-              left: `${(currentFrame / totalFrames) * 100}%`,
-              zIndex: 10, pointerEvents: 'none',
-              boxShadow: '0 0 8px var(--accent-pink)'
-            }}>
-              <div style={{
-                position: 'absolute', top: 0, left: '-4px',
-                width: 0, height: 0,
-                borderLeft: '5px solid transparent',
-                borderRight: '5px solid transparent',
-                borderTop: '6px solid var(--accent-pink)'
-              }}></div>
-            </div>
-            
+        <div 
+          className="tl-canvas-col" 
+          ref={scrollRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+        >
+          <div className="tl-canvas-inner" style={{ width: '100%', height: '100%', position: 'relative' }}>
             {/* Ruler */}
-            <div style={{ height: '24px', borderBottom: '1px solid var(--border)', display: 'flex' }}>
-              {Array.from({ length: 24 }).map((_, i) => (
-                <div key={i} style={{ 
-                  flex: 1, borderLeft: '1px solid rgba(255,255,255,0.1)', 
-                  fontSize: '9px', color: 'var(--text-dim)', paddingLeft: '4px',
-                  fontFamily: 'var(--font-heading)'
-                }}>
-                  {i * 10}
+            <div className="tl-ruler">
+              {Array.from({ length: Math.ceil(totalFrames / 10) }).map((_, i) => (
+                <div key={i} className="tl-tick" style={{ left: `${(i * 10 / totalFrames) * 100}%` }}>
+                  {i % 2 === 0 && <span className="tick-label">{i * 10}</span>}
                 </div>
               ))}
             </div>
 
-            {/* Tracks */}
+            {/* Playhead */}
+            <div className="tl-playhead" style={{ left: `${(currentFrame / totalFrames) * 100}%` }}>
+              <div className="playhead-head"></div>
+              <div className="playhead-line"></div>
+            </div>
+
+            {/* Keyframe Tracks */}
             {layers.map(l => (
-              <div key={l.id} style={{ 
-                height: '32px', borderBottom: '1px solid rgba(255,255,255,0.04)',
-                background: l.id === 'char1' ? 'rgba(124,58,237,0.05)' : 'transparent',
-                display: 'flex', alignItems: 'center', padding: '0 4px'
-              }}>
-                {l.id === 'char1' && (
-                  <div style={{
-                    width: '60px', height: '12px', background: 'var(--accent-violet)',
-                    borderRadius: '2px', marginLeft: '40px',
-                    boxShadow: '0 0 8px var(--accent-violet-glow)'
-                  }}></div>
-                )}
+              <div key={l.id} className="tl-track-row">
+                {/* Visualizing keyframes if the layer is a character */}
+                {characters.find(c => c.id === l.id)?.keyframes && Object.values(characters.find(c => c.id === l.id).keyframes).flat().map((kf, idx) => (
+                  <div 
+                    key={idx} 
+                    className="tl-keyframe" 
+                    style={{ left: `${(kf.frame / totalFrames) * 100}%` }}
+                    title={`Frame ${kf.frame}`}
+                  ></div>
+                ))}
               </div>
             ))}
           </div>

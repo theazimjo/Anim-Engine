@@ -1,139 +1,113 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Renderer } from '../engine/Renderer'
-import { AssetStore, loadImage, getAssetsToLoad } from '../engine/AssetStore'
+import { loadImage, getAssetsToLoad } from '../engine/AssetStore'
 
-export default function Viewport({
-  canvasRef, overlayRef, activeTab, setActiveTab,
-  zoom, setZoom, bgColor, characters, selectedCharacter, vfxEnabled,
-  vfxParams, currentFrame, isPlaying, layers
-}) {
-  const [renderer, setRenderer] = useState(null);
-  const [assetsLoaded, setAssetsLoaded] = useState(false);
+export default function Viewport({ characters, currentFrame, isPlaying, bgColor, zoom, animeMode = false }) {
+  const canvasRef = useRef(null)
+  const rendererRef = useRef(null)
+  const [assetsLoaded, setAssetsLoaded] = useState(false)
 
-  // Initialize WebGL and Load Assets
+  // Interpolation function
+  const interpolate = (keyframes, frame) => {
+    if (!keyframes || keyframes.length === 0) return 0;
+    const sorted = [...keyframes].sort((a, b) => a.frame - b.frame);
+    if (frame <= sorted[0].frame) return sorted[0].value;
+    if (frame >= sorted[sorted.length - 1].frame) return sorted[sorted.length - 1].value;
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const start = sorted[i];
+      const end = sorted[i + 1];
+      if (frame >= start.frame && frame <= end.frame) {
+        const t = (frame - start.frame) / (end.frame - start.frame);
+        return start.value + (end.value - start.value) * t;
+      }
+    }
+    return 0;
+  }
+
+  // Procedural Blinking Logic
+  const getBlinkScale = (frame) => {
+    const cycle = 120; 
+    const phase = frame % cycle;
+    const blinkDuration = 6;
+    if (phase >= cycle - blinkDuration && phase <= cycle) {
+        const mid = cycle - (blinkDuration/2);
+        if (phase < mid) return 1 - (phase - (cycle - blinkDuration)) / (blinkDuration/2);
+        return (phase - mid) / (blinkDuration/2);
+    }
+    return 1;
+  }
+
   useEffect(() => {
     if (!canvasRef.current) return;
     const r = new Renderer(canvasRef.current);
-    
+    rendererRef.current = r;
     const assets = getAssetsToLoad();
-    Promise.all(assets.map(asset => loadImage(asset.uri).then(img => r.createTexture(asset.id, img))))
-      .then(() => {
-        setRenderer(r);
-        setAssetsLoaded(true);
-      });
-  }, [canvasRef]);
+    Promise.all(assets.map(a => loadImage(a.uri).then(img => r.createTexture(a.id, img))))
+      .then(() => setAssetsLoaded(true));
+  }, []);
 
-  // Main Render Loop
   useEffect(() => {
-    if (!renderer || !assetsLoaded) return;
-    
-    let animationFrameId;
-    let startTime = performance.now();
+    if (!rendererRef.current || !assetsLoaded) return;
+    const r = rendererRef.current;
+    let animId;
 
-    const renderLoop = (time) => {
-      renderer.clear();
+    const render = () => {
+      r.clear();
       
-      const elapsedTime = (time - startTime) / 1000.0;
-      
-      // Draw Characters
-      const charLayer = layers.find(l => l.id === 'char1');
-      if (charLayer && charLayer.visible) {
-        characters.forEach(char => {
-          // Transform calculation
-          const baseScale = (char.scale || 100) / 100;
-          const baseScaleX = (1 + ((char.width || 0) / 100) * 0.5) * baseScale;
-          const baseScaleY = (1 + ((char.height || 0) / 100) * 0.5) * baseScale;
-          
-          // Screen coordinates (relative to center)
-          const centerX = 1280 / 2 + (char.x || 0);
-          const centerY = 720 / 2 + (char.y || 0);
-          
-          // Offset to draw from pivot (center of head/body which is 100,125 in 200x250)
-          const cx = centerX - (100 * baseScaleX);
-          const cy = centerY - (125 * baseScaleY);
-          
-          const rotation = (char.rotation || 0) * (Math.PI / 180);
-
-          // Note: Renderer.drawSprite currently doesn't support rotation. 
-          // For now we apply scale and position. 
-          // TODO: Update drawSprite to support rotation matrix.
-          
-          const headTurnOffset = (char.headTurn || 0) * 0.5 * baseScaleX;
-          const eyeTex = `eyes_${char.eyes || 1}`;
-          const noseTex = `nose_${char.nose || 1}`;
-          const mouthTex = `mouth_${char.mouth || 1}`;
-          const accTex = `acc_${char.acc || 1}`;
-          const hairTex = `hair_${char.hairStyle || 1}`;
-
-          renderer.drawSprite(`body_${char.body || 1}`, cx, cy, baseScaleX, baseScaleY, char.bodyColor, rotation);
-          renderer.drawSprite(`head_${char.head || 1}`, cx, cy, baseScaleX, baseScaleY, char.skinColor, rotation);
-          
-          // Manual Vertical Offsets from Character Creator
-          const eyeY = char.eyeY || 0;
-          const noseY = char.noseY || 0;
-          const mouthY = char.mouthY || 0;
-
-          // Eyes, Nose, Mouth, and Accessories move with head turn and manual offsets
-          renderer.drawSprite(eyeTex, cx + headTurnOffset, cy + eyeY, baseScaleX, baseScaleY, char.eyeColor, rotation);
-          renderer.drawSprite(noseTex, cx + headTurnOffset * 0.7, cy + noseY, baseScaleX, baseScaleY, null, rotation);
-          renderer.drawSprite(mouthTex, cx + headTurnOffset * 0.6, cy + mouthY, baseScaleX, baseScaleY, null, rotation);
-          renderer.drawSprite(accTex, cx + headTurnOffset * 0.8, cy, baseScaleX, baseScaleY, char.accColor, rotation);
-          
-          // Hair also moves slightly
-          renderer.drawSprite(hairTex, cx + headTurnOffset * 0.3, cy, baseScaleX, baseScaleY, char.hairColor, rotation);
-        });
+      // Anime Mode: Snap frame to simulate 8fps or 12fps (2s or 3s)
+      let effectiveFrame = currentFrame;
+      if (animeMode) {
+        effectiveFrame = Math.floor(currentFrame / 3) * 3; // "On 3s" approx
       }
 
-      // Draw VFX (Foreground)
-      const vfxLayer = layers.find(l => l.id === 'vfx');
-      if (vfxLayer && vfxLayer.visible && vfxEnabled['speedlines']) {
-        renderer.drawSpeedlines(
-          1280, 720, 
-          elapsedTime, 
-          vfxParams.color, 
-          vfxParams.intensity, 
-          vfxParams.speed
-        );
-      }
+      characters.forEach(char => {
+        const conf = char.config;
+        const rotation = (char.keyframes?.rotation ? interpolate(char.keyframes.rotation, effectiveFrame) : (char.transform?.rotation || 0)) * (Math.PI / 180);
+        const headTurn = char.keyframes?.headTurn ? interpolate(char.keyframes.headTurn, effectiveFrame) : (char.transform?.headTurn || 0);
+        const posX = char.keyframes?.x ? interpolate(char.keyframes.x, effectiveFrame) : (char.transform?.x || 0);
+        const posY = char.keyframes?.y ? interpolate(char.keyframes.y, effectiveFrame) : (char.transform?.y || 0);
+        const scale = char.keyframes?.scale ? interpolate(char.keyframes.scale, effectiveFrame) : (char.transform?.scale || 1);
 
-      animationFrameId = requestAnimationFrame(renderLoop);
+        const sX = (1 + (conf.width / 100) * 0.5) * scale;
+        const sY = (1 + (conf.height / 100) * 0.5) * scale;
+        
+        const baseCX = 800 / 2 - 100 * sX + posX;
+        const baseCY = 600 / 2 - 125 * sY + posY;
+
+        r.drawSprite(`hair_back_${conf.hairStyle}`, baseCX, baseCY + conf.hairY, sX, sY, conf.hairColor, rotation);
+        r.drawSprite(`body_${conf.body}`, baseCX, baseCY, sX, sY, null, rotation);
+        r.drawSprite(`head_${conf.head}`, baseCX, baseCY, sX, sY, null, rotation);
+        
+        const tx = headTurn * 0.5;
+        const blinkScale = getBlinkScale(effectiveFrame);
+        r.drawSprite(`eyes_${conf.eyes}`, baseCX + tx, baseCY + conf.eyeY + (1 - blinkScale) * 10, sX, sY * blinkScale, conf.eyeColor, rotation);
+        
+        r.drawSprite(`nose_${conf.nose}`, baseCX + tx * 0.5, baseCY + conf.noseY, sX, sY, null, rotation);
+        r.drawSprite(`mouth_${conf.mouth}`, baseCX + tx * 0.3, baseCY + conf.mouthY, sX, sY, null, rotation);
+        r.drawSprite(`acc_${conf.acc}`, baseCX + tx, baseCY, sX, sY, null, rotation);
+        r.drawSprite(`hair_front_${conf.hairStyle}`, baseCX, baseCY + conf.hairY, sX, sY, conf.hairColor, rotation);
+      });
+
+      if (isPlaying) animId = requestAnimationFrame(render);
     };
 
-    renderLoop(performance.now());
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [renderer, assetsLoaded, characters, layers, currentFrame]);
+    render();
+    return () => cancelAnimationFrame(animId);
+  }, [characters, currentFrame, isPlaying, assetsLoaded, animeMode]);
 
   return (
-    <div id="viewport-container">
+    <div id="viewport-container" style={{ backgroundColor: bgColor }}>
       <div className="vp-header">
-        <span className="vp-title">VIEWPORT</span>
+        <span className="vp-title">MAIN VIEWPORT</span>
         <div className="vp-tabs">
-          <button 
-            className={`vp-tab ${activeTab === 'scene' ? 'active' : ''}`}
-            onClick={() => setActiveTab('scene')}
-          >Scene</button>
-          <button 
-            className={`vp-tab ${activeTab === 'vfx' ? 'active' : ''}`}
-            onClick={() => setActiveTab('vfx')}
-          >VFX Preview</button>
+          <button className="vp-tab active">SCENE</button>
+          <button className="vp-tab">CAMERA</button>
         </div>
         <div className="vp-spacer"></div>
-        <button className="vp-ctrl-btn" onClick={() => setZoom(z => Math.max(10, z - 10))}>−</button>
-        <div className="zoom-display">{zoom}%</div>
-        <button className="vp-ctrl-btn" onClick={() => setZoom(z => Math.min(200, z + 10))}>+</button>
-        <button className="vp-ctrl-btn" style={{ marginLeft: '4px' }}>⊡ Fit</button>
+        <span className="zoom-display">{zoom}%</span>
       </div>
-
-      <div className="vp-wrap" style={{ backgroundColor: bgColor }}>
-        <div style={{ transform: `scale(${zoom / 100})`, position: 'relative', transformOrigin: 'center' }}>
-          <canvas 
-            id="main-canvas" 
-            ref={canvasRef}
-            width="1280" 
-            height="720"
-            style={{ width: '854px', height: '480px' }}
-          ></canvas>
-        </div>
+      <div className="vp-wrap">
+        <canvas ref={canvasRef} width="800" height="600" id="main-canvas"></canvas>
       </div>
     </div>
   )

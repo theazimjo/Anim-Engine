@@ -3,7 +3,8 @@ import React from 'react'
 export default function TopBar({
   isPlaying, setIsPlaying,
   currentFrame, setCurrentFrame,
-  totalFrames, fps, setFps
+  totalFrames, fps, setFps,
+  animeMode, setAnimeMode
 }) {
   return (
     <header id="topbar">
@@ -41,6 +42,16 @@ export default function TopBar({
             <span className="frame-label">fr</span>
           </div>
           
+          <div className="anime-toggle-wrap">
+            <button 
+              className={`anime-toggle-btn ${animeMode ? 'active' : ''}`}
+              onClick={() => setAnimeMode(!animeMode)}
+              title="Anime Mode (On 2s/3s)"
+            >
+              AS
+            </button>
+          </div>
+
           <select 
             className="fps-select" 
             value={fps} 
